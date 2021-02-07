@@ -8,4 +8,4 @@ package:
 	${CURDIR}/src-host/makeDebianPackage.sh
 
 test:
-	${CURDIR}/src-host/audimux-control.py --help
+	${CURDIR}/src-host/audiomux-control.py --help

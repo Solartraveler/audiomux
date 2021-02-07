@@ -1,7 +1,11 @@
 # audiomux
-This project provides a box for switching 4 stereo audio signals to 4 outputs. Any combination of inputs to outputs can be selected at the same time.
-Signal dissortion is minimized by using reed relays. Moreover, if the input source can drive a headphone, it will work on the output of the mux too.
-Allowing control by two USB ports, this can be easily used for a homeoffice + private PC setup. Controlling with an infrared remote control is posssible too.
+This project provides a box for switching 4 stereo audio inputs to 4 outputs. Any combination of inputs to outputs can be selected at the same time.
+Signal dissortion is minimized by using reed relays.
+Moreover, this provides galvanic isolation from the control circuit and if the input source can drive a headphone, it will work on the output of the mux too.
+Allowing control by two USB ports, this can be easily used for a homeoffice + private PC setup. Controlling with an infrared remote control is possible too.
+The power supply can come from one of the USB ports or one of two external 6-12V power supplies.
+For each power supply source, one predefined input to output mux configuration can be saved in the internal flash.
+
 
 ![alt text](pictures/pcbs-soldered.jpg "Two PCBs stacked and fully soldered")
 
@@ -63,4 +67,4 @@ Since GPL 2.0 and Apache 2.0 are considered [incompatible](https://www.apache.or
 The PCB is under creative common license. [CC-BY-SA 3.0 DE](https://creativecommons.org/licenses/by-sa/3.0/de/deed.en)
 
 ## Windows users
-See my instructions for the IRUSB project (https://github.com/Solartraveler/irusb). Only the USB ID and the name of the control programm will be differnt.
+See my instructions for the [IRUSB project](https://github.com/Solartraveler/irusb). Only the USB ID and the name of the control program will be different.

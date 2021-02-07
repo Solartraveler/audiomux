@@ -1,0 +1,69 @@
+To get the right enumeration of inputs and outputs, place the 1.PCB on top of the 2.PCB.
+Then the enumeration of the backside will look linke the following:
+Output1 Output2 Input1 Input2 <- 1.PCB
+Output3 Output4 Input3 Input4 <- 2.PCB
+I reccommend solder the 2.PCB first - then adjusting the height of J9 and J13 headers is easier when the spacers are in place.
+U1 may only be present on one PCB. It does not matter which one - but I suggest the one you solder first.
+
+
+1. and 2. PCB - duplicate number of parts to order
+                     Description              Ordner number of reichelt.de
+C1, C2               10µF, 16V 0805           X5R-G0805 10/16
+C3, C4, C5, C11      100nF 0805               X7R-G0805 100N
+D1-D10, D23          Schottky diode SK14      SK 14 DIO
+D11-D14, D16-D19     LED yellow PLCC2         LED SMD 2214 GE
+D15, D20             LED red    PLCC2         LED SMD 2214 RT
+D30                  LED red 0805             OSO LSR976
+D31                  LED green 0805           OSO LGR971
+H11-H15              dual light pipe          DIAL 515-1094F
+J1                   USB B jack               USB BW
+J4                   2pin 2.54mm header       MPE 087-1-002
+J5-J8                Stereo cinch connector   CBP 2
+J11                  3pin socket 2.54mm Debug MPE 094-1-003
+K1-K10               Reed relai 2x on         LITT HE722A0500
+Q1-Q10               BSS138 N channel mosfet  BSS 138 SMD
+R1, R5, R7           10k 0805                 SMD-0805 10,0K
+R2, R6               100k 0805                SMD-0805 100K
+R11-R20              330 0805                 SMD-0805 330
+R21-R24              10 1W 2512               RND 1552512 AA
+R30, R31             1k 0805                  SMD-0805 1,00K
+U2                   USB esd protection       USBLC6-2SC6
+U3                   STM32F042K6T             ---
+
+1.PCB (top):
+Jumper for J4        Share with 2. PCB
+J9                   10pin long header 2.54mm MPE 089-1-010
+J13                  5pin long header 2.54mm  MPE 089-1-005
+
+2.PCB (bottom):
+U1                   3.3V regulator, MCP1754S CP 1754-3302CB
+J9                   10pin socket 2.54mm      MPE 094-1-010
+J13                  5pin socket 2.54mm       MPE 094-1-005
+
+Between 1.PCB and 2.PCB
+-- 4x                Spacer 3mm 30mm height   DA 30MM
+-- 4x                Screw 3mm                --
+-- 4x                Screw-nut 3mm            --
+
+Optional for DC jack:
+C7                   10µF, 25V 1206           X7R-G1206 10/25
+C8                   10µF, 16V 0805           X5R-G0805 10/16
+D21, D22             Schottky diode SK14      SK 14 DIO
+J10                  DC Jack                  DC BU21 90
+R4                   100k 0805                SMD-0805 100K
+U5                   5V regulator, min 400mA  LM 2937 ET-5.0
+Heatsink for U5:     TO220, <=78K/K           ---
+
+Optional for IR receiver.
+Suggestion: Solder only on 2.PCB - its higer and therefore the view
+is less likely blocked by other things on a table or elsewhere.
+R3                   100 0805                 SMD-0805 100
+U4                   IR receiver TSOP31236    TSOP 31236
+C6                   4.7µF 0805               KEM X5R0805 4,7U
+
+Optional for crystal:
+C9, C10              22pF 0805                NPO-G0805 22P
+Y1                   8MHz crystal             8,0000-HC49U-S
+
+Optional for debugging:
+J12                  SWD debug 4pin header    MPE 087-1-004

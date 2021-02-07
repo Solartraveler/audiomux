@@ -1,0 +1,32 @@
+name: C/C++ CI
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install Dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y gcc-arm-none-eabi make dfu-util python3-usb
+    - name: make
+      run: make
+    - name: Test
+      run: make test
+#    - name: debianpackage
+#      run: make package
+#    - name: install
+#      run: sudo apt install -y ./*.deb
+    - name: Artifacts upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: Audiomux-binary-for-STM32F042K6T-and-debian-package
+        path: |
+          src-device/build/audiomux.bin
+          src-device/LICENSE
+          *.deb
+

@@ -1,0 +1,9 @@
+For a revision 1.1, I suggest:
+1.
+The footprint of J5-J8 needs elongated holes approx 0.2mm more wide. Its currently difficult to press the plastic holders of the audio connector into it.
+2.
+U5 and H6 are very close together - its therefore difficult to find a proper of-the-shelf headsink.
+3.
+The footprint for the light pipes H11 - H15 from kicad has 0.02mm smaller drills than recommend in the datasheet.
+The connector of the light pipe fits easily in the front hole, but pressing it in the rear hole is difficult.
+Maybe 0.1mm more drilling for the rear hole would be right. Or just use a rasp carefully on the light pipes.

@@ -7,3 +7,5 @@ U5 and H6 are very close together - its therefore difficult to find a proper of-
 The footprint for the light pipes H11 - H15 from kicad has 0.02mm smaller drills than recommend in the datasheet.
 The connector of the light pipe fits easily in the front hole, but pressing it in the rear hole is difficult.
 Maybe 0.1mm more drilling for the rear hole would be right. Or just use a rasp carefully on the light pipes.
+4.
+The RX and TX pins are directly connected, if the software is not configured properly, or closing one of the 2.PCB JP6 has been forgotten, two outputs would drive against each other. Resistors in the lines of RX1 and RX2 would be safe here.

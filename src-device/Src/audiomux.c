@@ -17,7 +17,45 @@
 
 
 Version history:
+2021-02-7: 0.2 - initial github checkin
 
+
+
+Maximum HSI clock derivation:
+-40°C: -2.25%...+3.75% -> delta: 6%
+-20°C: -1.5%...+2.75%  -> delta: 4.25%
+-10°C  -1.25%...2.25%  -> delta: 3.5%
++40°C -1%...+1.5%      -> delta: 2.5%
++80°C -1.75%...1.25%   -> delta: 3%
+
+UART charactersistics: Over8 = 0, BRR[3:0] = 0000, M[1:0] = 00, ONEBIT = 0
+  -> Allowed tolerance: 3.75% -> The communication between the two PCBs will
+  work in the temperature range -10°C to +80°C. This should be enough for
+  indoor use :) So no need for HSE crystal or auto baud detection.
+
+UART control codes:
+ High byte is send first and must always have MSB 0x80 set ->
+   makes re-sync easier if we lost a char
+ 0x8001 -> Ping
+ 0x90xy -> Set output x to input y -> so this is limited to 15 outputs and
+           15 inputs + mute
+
+USB Control codes:
+
+bmRequestType = USB_REQ_VENDOR & USB_REQ_DEVICE
+
+# bmRequest = 0 -> set/set mux, wIndex = 0...3 + 1 data byte
+# bmRequest = 1 -> save as default/get default, getter has 4 databytes
+#                                   wIndex = 0 -> USB
+#                                   wIndex = 1 -> DC jack
+# bmRequest = 2 -> save/get ir slot data, getter has 11 databytes
+#                                   wIndex = 1...16
+# bmRequest = 3 -> delete ir slot data, wIndex = 1...16
+# bmRequest = 4 -> device reset, 0 data bytes
+# bmRequest = 5 -> get voltage wIndex = 0 -> USB voltage, 2 data bytes
+#                              wIndex = 1 -> DC jack voltage voltage, 2 data bytes
+# bmRequest = 6 -> get PCB id. May be 1 or 2, 1 data byte.
+# bmRequest = 7 -> Get if other PCB MCU is sending. 1 Got ping within 3s. 1 data byte
 
 */
 
@@ -35,22 +73,7 @@ Version history:
 #include "irmp.h"
 
 
-/* Control codes:
-bmRequestType = USB_REQ_VENDOR & USB_REQ_DEVICE
-
-# bmRequest = 0 -> set/set mux, wIndex = 0...3 + 1 data byte
-# bmRequest = 1 -> save as default/get default, getter has 4 databytes
-#                                   wIndex = 0 -> USB
-#                                   wIndex = 1 -> DC jack
-# bmRequest = 2 -> save/get ir slot data, getter has 11 databytes
-#                                   wIndex = 1...16
-# bmRequest = 3 -> delete ir slot data, wIndex = 1...16
-# bmRequest = 4 -> device reset, 0 data bytes
-# bmRequest = 5 -> get voltage wIndex = 0 -> USB voltage, 2 data bytes
-#                              wIndex = 1 -> DC jack voltage voltage, 2 data bytes
-*/
-
-#define COMMANDQUEUELEN 8
+#define COMMANDQUEUELEN 16
 
 #define CMD_MUX_SET 0
 #define CMD_SAVE_DEFAULT 1
@@ -159,13 +182,41 @@ volatile uint8_t g_ResetRequest;
 volatile bool g_irRxValid;
 IRMP_DATA g_irRxLast;
 
-#define UARTBUFFERLEN 512
+#define UARTBUFFERLEN 300
 
 char g_uartBuffer[UARTBUFFERLEN];
-volatile uint8_t g_uartBufferReadIdx;
-volatile uint8_t g_uartBufferWriteIdx;
+volatile uint32_t g_uartBufferReadIdx;
+volatile uint32_t g_uartBufferWriteIdx;
 
 bool g_secondPcb; //If true, the PCB has inputs and ouptus 3 and 4 and needs to switch uart RX/TX
+
+//IMC = inter MCU communication
+#define IMCBUFFERLEN 8
+
+//This buffer is not used by an interrupt, so no volatile needed
+uint16_t g_imcTxQueue[IMCBUFFERLEN];
+uint32_t g_imcTxQueueReadIdx;
+uint32_t g_imcTxQueueWriteIdx;
+
+//This buffer is filled by the ISR
+uint16_t g_imcRxQueue[IMCBUFFERLEN];
+volatile uint32_t g_imcRxQueueReadIdx;
+volatile uint32_t g_imcRxQueueWriteIdx;
+
+
+
+/* Information flow:
+   USB -> Own PCB ? Set relays and g_outputState + send to other PCB
+   USB -> Not own PCB? -> send to other PCB
+   IR -> Own PCB ? Set relays and g_outputState + send to other PCB
+   IR -> Not own PCB? -> send to other PCB
+   UART -> Own PCB? Set relays and g_outputState + send to other PCB
+   UART -> Not own PCB? -> set g_outputState
+So by updateing g_outputState for the not own PCB values only over the UART
+both devices will always end up in the same state.
+*/
+
+
 uint8_t g_outputState[MUX_OUTPUTS];
 uint16_t g_voltageUsb;
 uint16_t g_voltageJack;
@@ -181,13 +232,16 @@ uint32_t g_writeCountdown;
 //If reached zero, this indicates the oter PCB is not working properly
 uint32_t g_OtherPcbCountdown;
 
+//If reached zero, send ping to other PCB
+uint32_t g_PingCountdown;
+
 
 //--------- Code for debug prints ----------------------------------------------
 
-char printReadChar(void) {
+static char printReadChar(void) {
 	char out = 0;
 	if (g_uartBufferReadIdx != g_uartBufferWriteIdx) {
-		uint8_t ri = g_uartBufferReadIdx;
+		uint32_t ri = g_uartBufferReadIdx;
 		out = g_uartBuffer[ri];
 		__sync_synchronize(); //the pointer increment may only be visible after the copy
 		ri = (ri + 1) % UARTBUFFERLEN;
@@ -210,27 +264,29 @@ void USART2_IRQHandler(void) {
 	__HAL_UART_CLEAR_FLAG(phuart, UART_CLEAR_PEF | UART_CLEAR_FEF | UART_CLEAR_NEF | UART_CLEAR_OREF | UART_CLEAR_IDLEF | UART_CLEAR_TCF | UART_CLEAR_LBDF | UART_CLEAR_CTSF | UART_CLEAR_CMF | UART_CLEAR_WUF | UART_CLEAR_RTOF);
 }
 
-void printWriteChar(char out) {
+//call only within interrupt locks
+static void printWriteChar(char out) {
 	UART_HandleTypeDef * phuart = &huart2;
-	uint8_t writeThis = g_uartBufferWriteIdx;
-	uint8_t writeNext = (writeThis + 1) % UARTBUFFERLEN;
+	uint32_t writeThis = g_uartBufferWriteIdx;
+	uint32_t writeNext = (writeThis + 1) % UARTBUFFERLEN;
 	if (writeNext != g_uartBufferReadIdx) {
 		g_uartBuffer[writeThis] = out;
 		g_uartBufferWriteIdx = writeNext;
 	}
-	__disable_irq();
+
 	if (__HAL_UART_GET_IT_SOURCE(phuart, UART_IT_TXE) == RESET) {
 		__HAL_UART_ENABLE_IT(phuart, UART_IT_TXE);
 	}
-	__enable_irq();
 }
 
-void writeString(const char * str) {
+//can be called from both, non interrupt and interrupt code, so lock it
+static void writeString(const char * str) {
+	__disable_irq();
 	while (*str) {
 		printWriteChar(*str);
 		str++;
 	}
-	//HAL_UART_Transmit(&huart1, (unsigned char *)str, strlen(str), 1000);
+	__enable_irq();
 }
 
 void dbgPrintf(const char * format, ...)
@@ -246,7 +302,7 @@ void dbgPrintf(const char * format, ...)
 }
 
 //simpler than HAL_UART_Receive and without an annoying timeout
-bool dbgUartGet(UART_HandleTypeDef *huart, uint8_t *pData) {
+static bool dbgUartGet(UART_HandleTypeDef *huart, uint8_t *pData) {
 
 	if (__HAL_UART_GET_FLAG(huart, UART_FLAG_RXNE)) {
 		*pData = (uint8_t)(huart->Instance->RDR & 0xFF);
@@ -259,10 +315,21 @@ void _Error_Handler(const char *file, uint32_t line) {
 	dbgPrintf("Error in %s:%u\r\n", file, (unsigned int)line);
 }
 
+//--------- Routing code -------------------------------------------------------
 
-//----- Audiomux and usb glue logic --------------------------------------------------
+static bool forThisPcb(uint8_t output) {
+	if ((g_secondPcb) && (output < 3)) { //2. PCB supports outputs 2 and 3
+		return false;
+	}
+	if ((!g_secondPcb) && (output >= 3)) { //1. PCB supports outputs 1 and 2
+		return false;
+	}
+	return true;
+}
 
-static bool cmdPut(const commandEntry_t * pCommand) {
+//----- Audiomux and usb glue logic --------------------------------------------
+
+static bool usbCmdPut(const commandEntry_t * pCommand) {
 	uint8_t writeThis = g_commandQueueWriteIdx;
 	uint8_t writeNext = (writeThis + 1) % COMMANDQUEUELEN;
 	if (writeNext != g_commandQueueReadIdx) {
@@ -275,48 +342,48 @@ static bool cmdPut(const commandEntry_t * pCommand) {
 	return false;
 }
 
-static bool cmdPutMux(uint8_t wIndex, const uint8_t * buffer) {
+static bool usbCmdPutMux(uint8_t wIndex, const uint8_t * buffer) {
 	if ((wIndex > 0) && (wIndex <= MUX_OUTPUTS) && (buffer[0] <= MUX_INPUTS)) {
 		commandEntry_t command;
 		command.type = CMD_MUX_SET;
 		command.data[0] = wIndex;
 		command.data[1] = buffer[0];
-		return cmdPut(&command);
+		return usbCmdPut(&command);
 	}
 	return false;
 }
 
-static bool cmdPutSaveDefault(uint8_t wIndex) {
+static bool usbCmdPutSaveDefault(uint8_t wIndex) {
 	if (wIndex < 2) {
 		commandEntry_t command;
 		command.type = CMD_SAVE_DEFAULT;
 		command.data[0] = wIndex;
-		return cmdPut(&command);
+		return usbCmdPut(&command);
 	}
 	return false;
 }
 
-static bool cmdPutSaveIr(uint8_t wIndex) {
+static bool usbCmdPutSaveIr(uint8_t wIndex) {
 	if ((wIndex > 0) && (wIndex < IR_PRESET_SLOTS)) {
 		commandEntry_t command;
 		command.type = CMD_SAVE_IR;
 		command.data[0] = wIndex;
-		return cmdPut(&command);
+		return usbCmdPut(&command);
 	}
 	return false;
 }
 
-static bool cmdPutDeleteIr(uint8_t wIndex) {
+static bool usbCmdPutDeleteIr(uint8_t wIndex) {
 	if ((wIndex > 0) && (wIndex < IR_PRESET_SLOTS)) {
 		commandEntry_t command;
 		command.type = CMD_DELETE_IR;
 		command.data[0] = wIndex;
-		return cmdPut(&command);
+		return usbCmdPut(&command);
 	}
 	return false;
 }
 
-static bool cmdGet(commandEntry_t * pCommand) {
+static bool usbCmdGet(commandEntry_t * pCommand) {
 	if (g_commandQueueReadIdx != g_commandQueueWriteIdx) {
 		uint8_t ri = g_commandQueueReadIdx;
 		memcpy(pCommand, &(g_commandQueue[ri]), sizeof(commandEntry_t));
@@ -357,12 +424,12 @@ static bool usbGetIrPreset(uint8_t irSlotIndex, uint8_t * dataOut) {
 	if ((irSlotIndex) && (irSlotIndex <= IR_PRESET_SLOTS)) {
 		irPreset_t * pIrC = &(g_settings.irPreset[irSlotIndex - 1]);
 		dataOut[0] = pIrC->protocol;
-		dataOut[1] = pIrC->address && 0xFF;
-		dataOut[2] = (pIrC->address >> 8) && 0xFF;
-		dataOut[3] = pIrC->command && 0xFF;
-		dataOut[4] = (pIrC->command >> 8) && 0xFF;
-		dataOut[5] = (pIrC->command >> 16) && 0xFF;
-		dataOut[6] = (pIrC->command >> 24) && 0xFF;
+		dataOut[1] = pIrC->address & 0xFF;
+		dataOut[2] = (pIrC->address >> 8) & 0xFF;
+		dataOut[3] = pIrC->command & 0xFF;
+		dataOut[4] = (pIrC->command >> 8) & 0xFF;
+		dataOut[5] = (pIrC->command >> 16) & 0xFF;
+		dataOut[6] = (pIrC->command >> 24) & 0xFF;
 		for (uint8_t i = 0; i < MUX_OUTPUTS; i++) {
 			dataOut[7 + i] = pIrC->outputs[i];
 		}
@@ -516,23 +583,23 @@ static usbd_respond usbControl(usbd_device *dev, usbd_ctlreq *req, usbd_rqc_call
 			{
 				case CMD_MUX_SET: //0
 					if (req->wLength > 0) {
-						if (cmdPutMux(req->wIndex, req->data)) {
+						if (usbCmdPutMux(req->wIndex, req->data)) {
 							return usbd_ack;
 						}
 					}
 					break;
 				case CMD_SAVE_DEFAULT: //1
-					if (cmdPutSaveDefault(req->wIndex)) {
+					if (usbCmdPutSaveDefault(req->wIndex)) {
 						return usbd_ack;
 					}
 					break;
 				case CMD_SAVE_IR: //2
-					if (cmdPutSaveIr(req->wIndex)) {
+					if (usbCmdPutSaveIr(req->wIndex)) {
 						return usbd_ack;
 					}
 					break;
 				case CMD_DELETE_IR: //3
-					if (cmdPutDeleteIr(req->wIndex)) {
+					if (usbCmdPutDeleteIr(req->wIndex)) {
 						return usbd_ack;
 					}
 					break;
@@ -559,7 +626,7 @@ static usbd_respond usbSetConf(usbd_device *dev, uint8_t cfg) {
 	return result;
 }
 
-void startUsb(void)
+static void startUsb(void)
 {
 	__HAL_RCC_USB_CLK_ENABLE();
 	usbd_init(&g_usbDev, &usbd_hw, 0x20, g_usbBuffer, sizeof(g_usbBuffer));
@@ -572,6 +639,8 @@ void startUsb(void)
 
 	NVIC_EnableIRQ(USB_IRQn);
 }
+
+
 
 //-------- the logic for the mux -----------------------------------------------
 
@@ -616,8 +685,11 @@ static void MuxSetOutput(uint8_t output, uint8_t input, bool enabled) {
 	}
 }
 
-void execMuxSwitch(uint8_t output, uint8_t input) {
+static void execMuxSwitch(uint8_t output, uint8_t input) {
 	if ((output > MUX_OUTPUTS) || (input > MUX_INPUTS)) {
+		return;
+	}
+	if (forThisPcb(output) == false) {
 		return;
 	}
 	uint8_t inputOld = g_outputState[output - 1];
@@ -625,13 +697,10 @@ void execMuxSwitch(uint8_t output, uint8_t input) {
 		dbgPrintf("Output %u already at input %u\r\n", output, input);
 		return;
 	}
+	/* The state of the outputs of the other PCB are only updated when getting it
+	   as value back over the uart -> always synchronized
+	*/
 	g_outputState[output - 1] = input;
-	if ((g_secondPcb) && (output < 3)) { //2. PCB supports outputs 2 and 3
-		return;
-	}
-	if ((!g_secondPcb) && (output >= 3)) { //1. PCB supports outputs 1 and 2
-		return;
-	}
 	dbgPrintf("Set output %u to %u\r\n", output, input);
 	if (output >= 3) {
 		output -= 2;
@@ -651,9 +720,20 @@ void execMuxSwitch(uint8_t output, uint8_t input) {
 	}
 }
 
-void execMuxSwitchAndForward(uint8_t output, uint8_t input) {
-	//forward to other PCB
+static bool imcTxPut(uint16_t command) {
+	uint32_t writeThis = g_imcTxQueueWriteIdx;
+	uint32_t writeNext = (writeThis + 1) % IMCBUFFERLEN;
+	if (writeNext != g_imcTxQueueReadIdx) {
+		g_imcTxQueue[writeThis] = command;
+		g_imcTxQueueWriteIdx = writeNext;
+		return true;
+	}
+	return false;
+}
 
+void execMuxSwitchAndForward(uint8_t output, uint8_t input) {
+	uint16_t command = 0x9000 | (output << 4) | input;
+	imcTxPut(command);
 	execMuxSwitch(output, input);
 }
 
@@ -717,22 +797,31 @@ static void execIrRec(IRMP_DATA * pIrmp_data) {
 			pIp->command = pIrmp_data->command;
 			storeStatePermanent(pIp->outputs);
 		}
+		g_nextIrCodeSaveSlot = 0;
 	}
 }
 
-static void execUartRec(uint8_t uartIn) {
-
-
-}
-
+//called every 100ms
 static void ledUpdate(void) {
 	static bool toggle = false;
-	if (toggle) {
-		HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-		toggle = false;
+	static uint8_t toggleCntDown = 0;
+
+	if (toggleCntDown == 0) {
+		if (toggle) {
+			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+			toggle = false;
+		} else {
+			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+			toggle = true;
+		}
+		if (g_OtherPcbCountdown == 0)
+		{
+			toggleCntDown = 0; //5Hz blink code as error
+		} else {
+			toggleCntDown = 5; //1Hz blink code as all is ok
+		}
 	} else {
-		HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-		toggle = true;
+		toggleCntDown--;
 	}
 }
 
@@ -747,7 +836,10 @@ static uint16_t getAdc(uint32_t channel) {
 }
 
 void adcUpdate() {
-	/* 2. PCB has for me:
+	/* 1. PCB has for me:
+	   tsCal1 = 1778
+	   tsCal2 = 1328
+	   2. PCB has for me:
 	   tsCal1 = 1776
 	   tsCal2 = 1319
 	*/
@@ -773,7 +865,7 @@ void adcUpdate() {
 	__enable_irq();
 }
 
-//in ha_flash_ex.c
+//in hal_flash_ex.c
 void FLASH_PageErase(uint32_t PageAddress);
 
 static void updatePermanentSettings(void) {
@@ -793,6 +885,169 @@ static void updatePermanentSettings(void) {
 		}
 		HAL_FLASH_Lock();
 		dbgPrintf("Done\r\n");
+	} else {
+		dbgPrintf("Skipping flash update - nothing changed\r\n");
+	}
+}
+
+//-------- inter MCU communication ---------------------------------------------
+
+static uint16_t imcTxGet(void) {
+	uint16_t out = 0;
+	if (g_imcTxQueueReadIdx != g_imcTxQueueWriteIdx) {
+		uint32_t ri = g_imcTxQueueReadIdx;
+		out = g_imcTxQueue[ri];
+		ri = (ri + 1) % IMCBUFFERLEN;
+		g_imcTxQueueReadIdx = ri;
+	}
+	return out;
+}
+
+static bool imcRxPut(uint16_t command) {
+	//dbgPrintf("RxPut: %x\r\n", command);
+	uint32_t writeThis = g_imcRxQueueWriteIdx;
+	uint32_t writeNext = (writeThis + 1) % IMCBUFFERLEN;
+	if (writeNext != g_imcRxQueueReadIdx) {
+		g_imcRxQueue[writeThis] = command;
+		g_imcRxQueueWriteIdx = writeNext;
+		return true;
+	}
+	return false;
+}
+
+static uint16_t imcRxGet(void) {
+	uint16_t out = 0;
+	if (g_imcRxQueueReadIdx != g_imcRxQueueWriteIdx) {
+		uint32_t ri = g_imcRxQueueReadIdx;
+		out = g_imcRxQueue[ri];
+		__sync_synchronize(); //the pointer increment may only be visible after the copy
+		ri = (ri + 1) % IMCBUFFERLEN;
+		g_imcRxQueueReadIdx = ri;
+	}
+	return out;
+}
+
+void USART1_IRQHandler(void) {
+	static uint16_t lastByte = 0;
+	static uint8_t cycle = 0;
+	if (USART1->ISR & USART_ISR_RXNE) {
+		//cycle = 0 -> expected to have 0x80 bit set
+		uint8_t thisByte = USART1->RDR;
+		//dbgPrintf("Got %x\r\n", thisByte);
+		if ((cycle == 0) && (thisByte & 0x80)) {
+			lastByte = thisByte;
+			cycle = 1;
+		} else if (cycle == 1) {
+			uint16_t command = (lastByte << 8) | thisByte;
+			imcRxPut(command);
+			cycle = 0;
+		}
+	}
+	//just clear all flags
+	USART1->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NCF | USART_ICR_ORECF | USART_ICR_IDLECF | USART_ICR_TCCF | USART_ICR_LBDCF | USART_ICR_CTSCF | USART_ICR_RTOCF | USART_ICR_EOBCF | USART_ICR_CMCF | USART_ICR_WUCF;
+	HAL_NVIC_ClearPendingIRQ(USART2_IRQn);
+}
+
+static void initUart1(void) {
+	__HAL_RCC_USART1_CLK_ENABLE();
+	HAL_NVIC_SetPriority(USART1_IRQn, 0, 0);
+	HAL_NVIC_EnableIRQ(USART1_IRQn);
+	USART1->CR1 = USART_CR1_RXNEIE | USART_CR1_RE | USART_CR1_TE; //we want the RX interrupt
+	if (g_secondPcb) {
+		/*One PCB must have the swap, otherwise two outputs will drive against
+		  each other! */
+		USART1->CR2 = USART_CR2_SWAP;
+	} else {
+		USART1->CR2 = 0;
+	}
+	USART1->CR3 = 0;
+	/*We get 10MHz and sending with ~10000baud should be safe
+	  the low 5 bits of BRR must be zero, as this increases the allowed clock
+	  derivation. 10M/10000 = 1024 -> 9765baud
+	*/
+	USART1->BRR = 1024;
+	USART1->CR1 |= USART_CR1_UE;
+
+	GPIO_InitTypeDef gitd = {0};
+	gitd.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+	gitd.Mode = GPIO_MODE_AF_PP;
+	gitd.Pull = GPIO_NOPULL;
+	gitd.Speed = GPIO_SPEED_FREQ_HIGH;
+	gitd.Alternate = GPIO_AF0_USART1;
+	HAL_GPIO_Init(GPIOB, &gitd);
+}
+
+static void sendUart1Char(uint8_t data) {
+	/*
+	Very first call (other PCB sending):
+	 1. ISR: 0x6000c0
+	 2. ISR: 0x600000
+
+ Typical ISR state (other PCB silent)
+	 1. Byte: ISR: 0x6000c0
+	 2. Byte: ISR: 0x600080
+	*/
+
+	//dbgPrintf("ISR: 0x%x\r\n", USART1->ISR);
+	uint32_t timeout = HAL_GetTick() + 5;
+	while ((USART1->ISR & UART_FLAG_TXE) == 0) {
+		if (HAL_GetTick() == timeout) {
+			break; //never observed, but possible accoring to the datasheet on first sent
+		}
+	}
+	USART1->TDR = data;
+}
+
+
+static void sendUart1Command(const uint8_t * data) {
+	sendUart1Char(data[0]);
+	sendUart1Char(data[1]);
+}
+
+//call for every 1ms. May take longer than 1ms, but not every time
+static void imcUpdate(void) {
+	uint8_t data[2];
+	if (g_OtherPcbCountdown) {
+		g_OtherPcbCountdown--;
+	}
+	if (g_PingCountdown == 0) {
+		data[0] = 0x80;
+		data[1] = 0x01;
+		sendUart1Command(data);
+		g_PingCountdown = 999;
+	} else {
+		g_PingCountdown--;
+	}
+	if (g_OtherPcbCountdown) {
+		/*Only when the other PCB has send a ping, we know its initialized,
+		  and the data won't get lost on the other side
+		*/
+		uint16_t command = imcTxGet();
+		if (command) {
+			dbgPrintf("Sent command to other PCB\r\n");
+			data[0] = command >> 8;
+			data[1] = command & 0xFF;
+			sendUart1Command(data);
+		}
+	}
+	uint16_t cmdFromOther = imcRxGet();
+	if (cmdFromOther) {
+		dbgPrintf("Got command %x from other PCB\r\n", cmdFromOther);
+		if (cmdFromOther == 0x8001) {
+			g_OtherPcbCountdown = 3000;
+		} else if ((cmdFromOther & 0x9000) == 0x9000) {
+			uint8_t output = (cmdFromOther >> 4) & 0xF;
+			uint8_t input = cmdFromOther & 0xF;
+			if ((output <= MUX_OUTPUTS) && (input <= MUX_INPUTS)) {
+				if (forThisPcb(output)) {
+					execMuxSwitchAndForward(output, input);
+				} else {
+					if (output <= MUX_OUTPUTS) {
+						g_outputState[output - 1] = input;
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -836,7 +1091,7 @@ void initPermanentSettings(void) {
 
 void initAudiomux(void) {
 	NVIC_EnableIRQ(USART2_IRQn);
-	dbgPrintf("Audiomux 0.2 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
+	dbgPrintf("Audiomux 0.3 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
 	startUsb();
 	irmp_init();
 	initAdc();
@@ -844,6 +1099,7 @@ void initAudiomux(void) {
 	if (HAL_GPIO_ReadPin(SecondPcb_GPIO_Port, SecondPcb_Pin) == GPIO_PIN_RESET) {
 		g_secondPcb = true;
 	}
+	initUart1(); //*must* be after setting g_secondPcb
 	HAL_TIM_Base_Start_IT(&htim3);
 	initPermanentSettings();
 	dbgPrintf("started\r\n");
@@ -855,7 +1111,7 @@ void Audiomux1msPassed(uint32_t timestamp) {
 	static uint32_t cycleCnt = 0;
 
 	commandEntry_t command;
-	bool newCmd = cmdGet(&command);
+	bool newCmd = usbCmdGet(&command);
 	if (newCmd)
 	{
 		if (command.type == CMD_MUX_SET) {
@@ -871,10 +1127,6 @@ void Audiomux1msPassed(uint32_t timestamp) {
 	IRMP_DATA irmp_data;
 	if (irmp_get_data(&irmp_data)) {
 		execIrRec(&irmp_data);
-	}
-	uint8_t uartIn;
-	if (dbgUartGet(&huart1, &uartIn)) {
-		execUartRec(uartIn);
 	}
 	if ((timestamp % 1000) == 0)
 	{
@@ -903,9 +1155,7 @@ void Audiomux1msPassed(uint32_t timestamp) {
 			updatePermanentSettings();
 		}
 	}
-	if (g_OtherPcbCountdown) {
-		g_OtherPcbCountdown--;
-	}
+	imcUpdate();
 }
 
 void loopAudiomux(void) {

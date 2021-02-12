@@ -6,7 +6,6 @@ Allowing control by two USB ports, this can be easily used for a homeoffice + pr
 The power supply can come from one of the USB ports or one of two external 6-12V power supplies.
 For each power supply source, one predefined input to output mux configuration can be saved in the internal flash.
 
-
 ![alt text](pictures/pcbs-soldered.jpg "Two PCBs stacked and fully soldered")
 
 ## Host program
@@ -44,7 +43,6 @@ You can add a serial port with 3.3V level to J11 and see some debug messages whe
 Debugging with SWD should be possible too, but this was not tested.
 
 ## TODO
-The communication between the two PCBs is not implemented yet. So each USB port can control only its own two outputs right now.
 
 The case must be milled to be useable.
 

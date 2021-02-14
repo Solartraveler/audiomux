@@ -9,3 +9,6 @@ The connector of the light pipe fits easily in the front hole, but pressing it i
 Maybe 0.1mm more drilling for the rear hole would be right. Or just use a rasp carefully on the light pipes.
 4.
 The RX and TX pins are directly connected, if the software is not configured properly, or closing one of the 2.PCB JP6 has been forgotten, two outputs would drive against each other. Resistors in the lines of RX1 and RX2 would be safe here.
+5.
+While in DFU upload mode, the MCU pulls PA9, PA10 and PA15 high, as a result the relays switch and Inputs 3 and 4 are connected together with mute.
+Workaround: While uploading firmware, unplug audio inputs 3 and 4.

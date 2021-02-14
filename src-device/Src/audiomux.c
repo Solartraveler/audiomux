@@ -17,7 +17,8 @@
 
 
 Version history:
-2021-02-7: 0.2 - initial github checkin
+2021-02-07: 0.2 - initial github checkin
+2021-02-14: 0.4 - features complete
 
 
 
@@ -71,6 +72,7 @@ bmRequestType = USB_REQ_VENDOR & USB_REQ_DEVICE
 #include "usb.h"
 #include "main.h"
 #include "irmp.h"
+#include "femtoVsnprintf.h"
 
 
 #define COMMANDQUEUELEN 16
@@ -238,6 +240,35 @@ uint32_t g_PingCountdown;
 
 //--------- Code for debug prints ----------------------------------------------
 
+static void initUart2(void) {
+	__HAL_RCC_USART2_CLK_ENABLE();
+	NVIC_SetPriority(USART2_IRQn, 0);
+	NVIC_EnableIRQ(USART2_IRQn);
+	HAL_Delay(50);
+
+	USART2->CR1 = USART_CR1_TXEIE | USART_CR1_RE | USART_CR1_TE; //we want the TX interrupt
+	USART2->CR2 = 0;
+	USART2->CR3 = 0;
+	USART2->BRR = HAL_RCC_GetPCLK1Freq() / 19200;
+	USART2->CR1 |= USART_CR1_UE;
+
+	GPIO_InitTypeDef gitd = {0};
+	gitd.Pin = GPIO_PIN_2;
+	gitd.Mode = GPIO_MODE_AF_PP;
+	gitd.Pull = GPIO_NOPULL;
+	gitd.Speed = GPIO_SPEED_FREQ_HIGH;
+	gitd.Alternate = GPIO_AF1_USART2;
+	HAL_GPIO_Init(GPIOA, &gitd);
+
+	gitd.Pin = GPIO_PIN_3;
+	gitd.Mode = GPIO_MODE_AF_PP;
+	gitd.Pull = GPIO_PULLUP;
+	gitd.Speed = GPIO_SPEED_FREQ_HIGH;
+	gitd.Alternate = GPIO_AF1_USART2;
+	HAL_GPIO_Init(GPIOA, &gitd);
+}
+
+
 static char printReadChar(void) {
 	char out = 0;
 	if (g_uartBufferReadIdx != g_uartBufferWriteIdx) {
@@ -251,31 +282,29 @@ static char printReadChar(void) {
 }
 
 void USART2_IRQHandler(void) {
-	UART_HandleTypeDef * phuart = &huart2;
-	if (__HAL_UART_GET_FLAG(phuart, UART_FLAG_TXE) == SET) {
+	if (USART2->ISR & USART_ISR_TXE) {
 		char c = printReadChar();
 		if (c) {
-			phuart->Instance->TDR = c;
+			USART2->TDR = c;
 		} else {
-			__HAL_UART_DISABLE_IT(phuart, UART_IT_TXE);
+			USART2->CR1 &= ~USART_CR1_TXEIE;
 		}
 	}
 	//just clear all flags
-	__HAL_UART_CLEAR_FLAG(phuart, UART_CLEAR_PEF | UART_CLEAR_FEF | UART_CLEAR_NEF | UART_CLEAR_OREF | UART_CLEAR_IDLEF | UART_CLEAR_TCF | UART_CLEAR_LBDF | UART_CLEAR_CTSF | UART_CLEAR_CMF | UART_CLEAR_WUF | UART_CLEAR_RTOF);
+	USART2->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NCF | USART_ICR_ORECF | USART_ICR_IDLECF | USART_ICR_TCCF | USART_ICR_LBDCF | USART_ICR_CTSCF | USART_ICR_RTOCF | USART_ICR_EOBCF | USART_ICR_CMCF | USART_ICR_WUCF;
+	NVIC_ClearPendingIRQ(USART2_IRQn);
 }
 
 //call only within interrupt locks
 static void printWriteChar(char out) {
-	UART_HandleTypeDef * phuart = &huart2;
 	uint32_t writeThis = g_uartBufferWriteIdx;
 	uint32_t writeNext = (writeThis + 1) % UARTBUFFERLEN;
 	if (writeNext != g_uartBufferReadIdx) {
 		g_uartBuffer[writeThis] = out;
 		g_uartBufferWriteIdx = writeNext;
 	}
-
-	if (__HAL_UART_GET_IT_SOURCE(phuart, UART_IT_TXE) == RESET) {
-		__HAL_UART_ENABLE_IT(phuart, UART_IT_TXE);
+	if ((USART2->CR1 & USART_CR1_TXEIE) == 0) {
+		USART2->CR1 |= USART_CR1_TXEIE;
 	}
 }
 
@@ -295,17 +324,18 @@ void dbgPrintf(const char * format, ...)
 
 	va_list args;
 	va_start(args, format);
-	//removing the vsnprintf call would save more than 3KiB program code.
-	vsnprintf(buffer, sizeof(buffer), format, args);
+	//Replacing vsnprintf call by femtoVsnprintf saves ~2.5KiB program code.
+	//vsnprintf(buffer, sizeof(buffer), format, args);
+	femtoVsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 	writeString(buffer);
 }
 
 //simpler than HAL_UART_Receive and without an annoying timeout
-static bool dbgUartGet(UART_HandleTypeDef *huart, uint8_t *pData) {
+static bool dbgUartGet(uint8_t *pData) {
 
-	if (__HAL_UART_GET_FLAG(huart, UART_FLAG_RXNE)) {
-		*pData = (uint8_t)(huart->Instance->RDR & 0xFF);
+	if ((USART2->ISR) & USART_ISR_RXNE) {
+		*pData = (uint8_t)(USART2->RDR);
 		return true;
 	}
 	return false;
@@ -945,13 +975,13 @@ void USART1_IRQHandler(void) {
 	}
 	//just clear all flags
 	USART1->ICR = USART_ICR_PECF | USART_ICR_FECF | USART_ICR_NCF | USART_ICR_ORECF | USART_ICR_IDLECF | USART_ICR_TCCF | USART_ICR_LBDCF | USART_ICR_CTSCF | USART_ICR_RTOCF | USART_ICR_EOBCF | USART_ICR_CMCF | USART_ICR_WUCF;
-	HAL_NVIC_ClearPendingIRQ(USART2_IRQn);
+	NVIC_ClearPendingIRQ(USART1_IRQn);
 }
 
 static void initUart1(void) {
 	__HAL_RCC_USART1_CLK_ENABLE();
-	HAL_NVIC_SetPriority(USART1_IRQn, 0, 0);
-	HAL_NVIC_EnableIRQ(USART1_IRQn);
+	NVIC_SetPriority(USART1_IRQn, 0);
+	NVIC_EnableIRQ(USART1_IRQn);
 	USART1->CR1 = USART_CR1_RXNEIE | USART_CR1_RE | USART_CR1_TE; //we want the RX interrupt
 	if (g_secondPcb) {
 		/*One PCB must have the swap, otherwise two outputs will drive against
@@ -961,11 +991,11 @@ static void initUart1(void) {
 		USART1->CR2 = 0;
 	}
 	USART1->CR3 = 0;
-	/*We get 10MHz and sending with ~10000baud should be safe
+	/*We get 10MHz and sending with ~20000baud should be safe
 	  the low 5 bits of BRR must be zero, as this increases the allowed clock
-	  derivation. 10M/10000 = 1024 -> 9765baud
+	  derivation. 10M/10000 = 1024 -> 26041baud -> 26kHz is outside the hearing range :)
 	*/
-	USART1->BRR = 1024;
+	USART1->BRR = 384;
 	USART1->CR1 |= USART_CR1_UE;
 
 	GPIO_InitTypeDef gitd = {0};
@@ -990,7 +1020,7 @@ static void sendUart1Char(uint8_t data) {
 
 	//dbgPrintf("ISR: 0x%x\r\n", USART1->ISR);
 	uint32_t timeout = HAL_GetTick() + 5;
-	while ((USART1->ISR & UART_FLAG_TXE) == 0) {
+	while ((USART1->ISR & USART_ISR_TXE) == 0) {
 		if (HAL_GetTick() == timeout) {
 			break; //never observed, but possible accoring to the datasheet on first sent
 		}
@@ -1032,10 +1062,10 @@ static void imcUpdate(void) {
 	}
 	uint16_t cmdFromOther = imcRxGet();
 	if (cmdFromOther) {
-		dbgPrintf("Got command %x from other PCB\r\n", cmdFromOther);
 		if (cmdFromOther == 0x8001) {
 			g_OtherPcbCountdown = 3000;
-		} else if ((cmdFromOther & 0x9000) == 0x9000) {
+		} else if ((cmdFromOther & 0xF000) == 0x9000) {
+			dbgPrintf("Got command %x\r\n", cmdFromOther);
 			uint8_t output = (cmdFromOther >> 4) & 0xF;
 			uint8_t input = cmdFromOther & 0xF;
 			if ((output <= MUX_OUTPUTS) && (input <= MUX_INPUTS)) {
@@ -1062,7 +1092,7 @@ static void initAdc(void) {
 	while (ADC1->CR & ADC_CR_ADCAL); //wait for calibration to end
 	HAL_Delay(1); //errata workaround
 	ADC1->CR |= ADC_CR_ADEN; //can not be done within 4 adc clock cycles, due errata
-	while ((ADC1->ISR & ADC_FLAG_RDY) == 0); //measured 8 loop cycles @12MHz until bit was set
+	while ((ADC1->ISR & ADC_ISR_ADRDY) == 0); //measured 8 loop cycles @12MHz until bit was set
 }
 
 void initPermanentSettings(void) {
@@ -1090,8 +1120,8 @@ void initPermanentSettings(void) {
 }
 
 void initAudiomux(void) {
-	NVIC_EnableIRQ(USART2_IRQn);
-	dbgPrintf("Audiomux 0.3 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
+	initUart2();
+	dbgPrintf("Audiomux 0.4 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
 	startUsb();
 	irmp_init();
 	initAdc();
@@ -1133,8 +1163,8 @@ void Audiomux1msPassed(uint32_t timestamp) {
 		cycleCnt++;
 		dbgPrintf("Cycle %u\r\n", (unsigned int)cycleCnt);
 	}
-	uint8_t debugData;
-	if (dbgUartGet(&huart2, &debugData)) {
+	uint8_t debugData = 0;
+	if (dbgUartGet(&debugData)) {
 		dbgPrintf("Input %u\r\n", debugData);
 	}
 	if ((debugData == 'R') || (g_ResetRequest == true)) {

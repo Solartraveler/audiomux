@@ -55,14 +55,10 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
-extern ADC_HandleTypeDef hadc;
-
 extern IWDG_HandleTypeDef hiwdg;
 
 extern TIM_HandleTypeDef htim3;
 
-extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
 
 
 /* USER CODE END EFP */

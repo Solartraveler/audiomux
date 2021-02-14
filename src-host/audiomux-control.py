@@ -72,18 +72,21 @@ def showCurrentState(dev):
 
 	print('IR presets:')
 	for i in range(1, PresetSlots + 1):
-		print('  Slot' + str(i) + ':')
 		deviceArray = dev.ctrl_transfer(bmRequestRecv, 2, 0, i, 7 + MuxOutputs)
 		protocol = deviceArray[0]
 		address = (deviceArray[2] << 8) | deviceArray[1]
 		command = (deviceArray[6] << 24) | (deviceArray[5] << 16) | (deviceArray[4] << 8) | deviceArray[3]
-		print('  Protocol: ' + str(protocol) + ', address: ' + str(address) + ', command: ' + str(command))
-		for j in range(1, MuxOutputs + 1):
-			out = deviceArray[6 + j]
-			if (out == 0):
-				print('    Output ' + str(j) + ': off')
-			else:
-				print('    Output ' + str(i) + ': Input ' + str(out))
+		if protocol or address or command:
+			print('  Slot' + str(i) + ':')
+			print('    Protocol: ' + str(protocol) + ', address: ' + str(address) + ', command: ' + str(command))
+			for j in range(1, MuxOutputs + 1):
+				out = deviceArray[6 + j]
+				if (out == 0):
+					print('    Output ' + str(j) + ': off')
+				else:
+					print('    Output ' + str(i) + ': Input ' + str(out))
+		else:
+			print('  Slot' + str(i) + ': Unused')
 
 	print('Voltages:')
 	deviceArray = dev.ctrl_transfer(bmRequestRecv, 5, 0, 0, 2)
@@ -91,7 +94,7 @@ def showCurrentState(dev):
 	print('  USB: ' + str(usbvoltage) + 'mV')
 	deviceArray = dev.ctrl_transfer(bmRequestRecv, 5, 0, 1, 2)
 	vccvoltage = (deviceArray[1] << 8) | deviceArray[0]
-	print('  Vcc: ' + str(vccvoltage) + 'mV')
+	print('  Jack: ' + str(vccvoltage) + 'mV')
 	deviceArray = dev.ctrl_transfer(bmRequestRecv, 5, 0, 2, 2)
 	temperature = (deviceArray[1] << 8) | deviceArray[0]
 	if (temperature >= 0x8000):
@@ -101,16 +104,16 @@ def showCurrentState(dev):
 	print('PCB id: ' + str(deviceArray[0]))
 	deviceArray = dev.ctrl_transfer(bmRequestRecv, 7, 0, 0, 1)
 	if (deviceArray[0]):
-		print('Other MCU running')
+		print('Other MCU: running')
 	else:
-		print('Error, no response from MCU on other PCB')
+		print('Other MCU: Error, no response')
 
 
 def saveAsDefaultUsb(dev):
 	dev.ctrl_transfer(bmRequestSend, 1, 0, 0, 0)
 	return(True)
 
-def saveAsDefaultVcc(dev):
+def saveAsDefaultJack(dev):
 	dev.ctrl_transfer(bmRequestSend, 1, 0, 1, 0)
 	return(True)
 
@@ -169,7 +172,7 @@ if parameters == 2:
 		print('  Example: 2 1')
 		print('audiomuxreset: Resets the device. Ignoring the command queue. Both USB ports are being resetted')
 		print('savedefaultusb: Save the current state as default if the device is powered over USB')
-		print('savedefaultvcc: Save the current state as default if the device is powered over an DC jack')
+		print('savedefaultjack: Save the current state as default if the device is powered over an DC jack')
 		print('storeir <index>: Save the current state with the next IR remote code to be received. <index> is the slot to use 1...' + str(PresetSlots))
 		print('deleteir <index>: Do not use the infrared code anylonger')
 		print('state: Print all permanent settings and current state')
@@ -233,8 +236,8 @@ elif parameters == 2:
 		success = sendReset(dev)
 	elif sys.argv[1] == 'savedefaultusb':
 		success = saveAsDefaultUsb(dev)
-	elif sys.argv[1] == 'savedefaultvcc':
-		success = saveAsDefaultVcc(dev)
+	elif sys.argv[1] == 'savedefaultjack':
+		success = saveAsDefaultJack(dev)
 	elif sys.argv[1] == 'state':
 		success = showCurrentState(dev)
 	else:

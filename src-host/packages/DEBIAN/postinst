@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+udevadm control --reload-rules
+
+#Trigger a rule reload, it the device is already attached - avoids unplug and replugging
+
+if lsusb -d1209:7701; then
+  udevadm trigger --subsystem-match=usb
+fi

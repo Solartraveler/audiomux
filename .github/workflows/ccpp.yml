@@ -17,10 +17,10 @@ jobs:
       run: make
     - name: Test
       run: make test
-#    - name: debianpackage
-#      run: make package
-#    - name: install
-#      run: sudo apt install -y ./*.deb
+    - name: debianpackage
+      run: make package
+    - name: install
+      run: sudo apt install -y ./*.deb
     - name: Artifacts upload
       uses: actions/upload-artifact@v2
       with:

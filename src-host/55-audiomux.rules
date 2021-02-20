@@ -1,0 +1,2 @@
+#IRUSB
+ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7701", GROUP="plugdev", MODE="0660"

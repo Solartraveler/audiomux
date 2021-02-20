@@ -20,6 +20,7 @@ Version history:
 2021-02-07: 0.2 - initial github checkin
 2021-02-14: 0.4 - features complete
 2021-02-20: 0.5 - analyze stack usage, add WCID extension
+2021-02-20: 0.6 - add final USB PID
 
 
 Maximum HSI clock derivation:
@@ -162,7 +163,7 @@ uint8_t g_deviceDescriptor[] = {
 	0xFF,       //device protocol
 	32,         //maximum packet size
 	0x09,0x12,  //vid
-	0x01,0x00,  //pid
+	0x01,0x77,  //pid
 	0x00,0x01,  //revision
 	0x1,        //manufacturer index
 	0x2,        //product name index
@@ -1191,7 +1192,7 @@ void initPermanentSettings(void) {
 
 void initAudiomux(void) {
 	initUart2();
-	dbgPrintf("Audiomux 0.5 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
+	dbgPrintf("Audiomux 0.6.0 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
 	startUsb();
 	irmp_init();
 	initAdc();

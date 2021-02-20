@@ -16,7 +16,7 @@
 # this program; if not, write to the Free Software Foundation, Inc., 51 Franklin
 # Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
-#version 1.0.0, tested with python 3.7
+#version 0.6.0, tested with python 3.7
 
 
 #Control codes:
@@ -185,7 +185,7 @@ if parameters == 2:
 		print('3: USB device not found, or product name wrong')
 		sys.exit(0)
 	if (sys.argv[1] == '--version'):
-		print('Version 0.1.0')
+		print('Version 0.6.0')
 		sys.exit(0)
 
 try:
@@ -200,8 +200,8 @@ except:
 
 # find our device
 #For testing own devices, use idProduct=0x0001
-dev = usb.core.find(idVendor=0x1209, idProduct=0x0001)
-#dev = usb.core.find(idVendor=0x1209, idProduct=0x7701)
+#dev = usb.core.find(idVendor=0x1209, idProduct=0x0001)
+dev = usb.core.find(idVendor=0x1209, idProduct=0x7701)
 
 # was it found?
 if dev is None:

@@ -19,7 +19,7 @@
 Version history:
 2021-02-07: 0.2 - initial github checkin
 2021-02-14: 0.4 - features complete
-
+2021-02-20: 0.5 - analyze stack usage, add WCID extension
 
 
 Maximum HSI clock derivation:
@@ -57,6 +57,32 @@ bmRequestType = USB_REQ_VENDOR & USB_REQ_DEVICE
 #                              wIndex = 1 -> DC jack voltage voltage, 2 data bytes
 # bmRequest = 6 -> get PCB id. May be 1 or 2, 1 data byte.
 # bmRequest = 7 -> Get if other PCB MCU is sending. 1 Got ping within 3s. 1 data byte
+
+Windows 10 try after deleting registry:
+
+type 80 req 6 wVal 100 wInd 0 wLen 18
+type 80 req 6 wVal 200 wInd 0 wLen 9
+type 80 req 6 wVal 200 wInd 0 wLen 18
+type 80 req 6 wVal 100 wInd 0 wLen 64
+Cycle 17
+type 0 req 5 wVal E wInd 0 wLen 0
+type 80 req 6 wVal 100 wInd 0 wLen 18
+type 80 req 6 wVal 200 wInd 0 wLen 18
+type 0 req 9 wVal 1 wInd 0 wLen 0
+type 80 req 6 wVal 100 wInd 0 wLen 64
+type 0 req 5 wVal E wInd 0 wLen 0
+type 80 req 6 wVal 100 wInd 0 wLen 18
+type 80 req 6 wVal 200 wInd 0 wLen 18
+type 0 req 9 wVal 1 wInd 0 wLen 0
+type 80 req 6 wVal 3EE wInd 0 wLen 18
+--This is the 'W'=0x57 request for the driver description:--
+type C0 req 57 wVal 0 wInd 4 wLen 16
+type C0 req 57 wVal 0 wInd 4 wLen 40
+type 80 req 6 wVal 300 wInd 0 wLen 255
+type 80 req 6 wVal 302 wInd 409 wLen 255
+type 80 req 6 wVal 600 wInd 0 wLen 10
+Cycle 18
+type C1 req 57 wVal 0 wInd 5 wLen 10
 
 */
 
@@ -130,11 +156,11 @@ USB control commands */
 uint8_t g_deviceDescriptor[] = {
 	0x12,       //length of this struct
 	0x01,       //always 1
-	0x10,0x01,  //usb version
+	0x00,0x02,  //usb version
 	0xFF,       //device class
 	0xFF,       //subclass
 	0xFF,       //device protocol
-	0x20,       //maximum packet size
+	32,         //maximum packet size
 	0x09,0x12,  //vid
 	0x01,0x00,  //pid
 	0x00,0x01,  //revision
@@ -169,6 +195,23 @@ static struct usb_string_descriptor g_lang_desc     = USB_ARRAY_DESC(USB_LANGID_
 static struct usb_string_descriptor g_manuf_desc_en = USB_STRING_DESC("marwedels.de");
 static struct usb_string_descriptor g_prod_desc_en  = USB_STRING_DESC("Audiomux");
 
+//The W will be the code for bRequest later
+static struct usb_string_descriptor g_wcid_desc     = USB_ARRAY_DESC('M', 'S', 'F', 'T', '1', '0', '0', 'W');
+
+//good tutorial: https://github.com/pbatard/libwdi/wiki/WCID-Devices
+const uint8_t g_WcidPacket[] = {
+40, 0, 0, 0,  //descriptor length = 40 bytes = size of this struct
+0, 1, //version 1.0
+4, 0, //comatibility id
+1, //number of sections
+0, 0, 0, 0, 0, 0, 0, //reserved...
+0, //interface number
+1, //reserved... but why should it be 1?
+'W', 'I', 'N', 'U', 'S', 'B', 0, 0, //the driver to use, no driver to install, but no python backend
+0, 0, 0, 0, 0, 0, 0, 0, //we love zeros...
+0, 0, 0, 0, 0, 0 //even more reserved...
+};
+
 commandEntry_t g_commandQueue[COMMANDQUEUELEN];
 /*logic: if g_commandQueueReadIdx != g_commandQueueWriteIdx -> something to read from
   if (g_commandQueueReadIdx != (g_commandQueueWriteIdx + 1)) -> we have space to write to
@@ -184,7 +227,7 @@ volatile uint8_t g_ResetRequest;
 volatile bool g_irRxValid;
 IRMP_DATA g_irRxLast;
 
-#define UARTBUFFERLEN 300
+#define UARTBUFFERLEN 500
 
 char g_uartBuffer[UARTBUFFERLEN];
 volatile uint32_t g_uartBufferReadIdx;
@@ -237,6 +280,9 @@ uint32_t g_OtherPcbCountdown;
 //If reached zero, send ping to other PCB
 uint32_t g_PingCountdown;
 
+//Statistics about the amount of stack actually used
+uintptr_t g_MinStackValue = 0xFFFFFFFF;
+extern int _estack;
 
 //--------- Code for debug prints ----------------------------------------------
 
@@ -343,6 +389,13 @@ static bool dbgUartGet(uint8_t *pData) {
 
 void _Error_Handler(const char *file, uint32_t line) {
 	dbgPrintf("Error in %s:%u\r\n", file, (unsigned int)line);
+}
+
+static void SampleStackUsage(void) {
+	uint8_t dummy;
+	if ((uintptr_t)&dummy < g_MinStackValue) {
+		g_MinStackValue = (uintptr_t)&dummy;
+	}
 }
 
 //--------- Routing code -------------------------------------------------------
@@ -509,6 +562,7 @@ static bool usbGetOtherPcbState(uint8_t * dataOut) {
 
 void  timer3IntCallback(void) {
 	irmp_ISR();
+	SampleStackUsage();
 }
 
 //---------- USB handling ------------------------------------------------------
@@ -519,6 +573,7 @@ void USB_IRQHandler(void)
 }
 
 static usbd_respond usbGetDesc(usbd_ctlreq *req, void **address, uint16_t *length) {
+	SampleStackUsage();
 	const uint8_t dtype = req->wValue >> 8;
 	const uint8_t dnumber = req->wValue & 0xFF;
 	void* desc = NULL;
@@ -536,7 +591,7 @@ static usbd_respond usbGetDesc(usbd_ctlreq *req, void **address, uint16_t *lengt
 			result = usbd_ack;
 			break;
 		case USB_DTYPE_STRING:
-			if (dnumber < 3) {
+			{
 				struct usb_string_descriptor * pStringDescr = NULL;
 				if (dnumber == 0) {
 					pStringDescr = &g_lang_desc;
@@ -547,9 +602,14 @@ static usbd_respond usbGetDesc(usbd_ctlreq *req, void **address, uint16_t *lengt
 				if (dnumber == 2) {
 					pStringDescr = &g_prod_desc_en;
 				}
-				desc = pStringDescr;
-				len = pStringDescr->bLength;
-				result = usbd_ack;
+				if (dnumber == 0xEE) {
+					pStringDescr = &g_wcid_desc;
+				}
+				if (pStringDescr) {
+					desc = pStringDescr;
+					len = pStringDescr->bLength;
+					result = usbd_ack;
+				}
 			}
 			break;
 	}
@@ -559,12 +619,12 @@ static usbd_respond usbGetDesc(usbd_ctlreq *req, void **address, uint16_t *lengt
 }
 
 static usbd_respond usbControl(usbd_device *dev, usbd_ctlreq *req, usbd_rqc_callback *callback) {
+	SampleStackUsage();
 	//Printing can be done here as long it is buffered. Otherwise it might be too slow
-	//dbgPrintf("type %x request %x wvalue %x windex %x wLength %u\r\n", req->bmRequestType, req->bRequest, req->wValue, req->wIndex, req->wLength);
+	dbgPrintf("type %x req %x wVal %x wInd %x wLen %u\r\n", req->bmRequestType, req->bRequest, req->wValue, req->wIndex, req->wLength);
 	if ((req->bmRequestType & (USB_REQ_TYPE | USB_REQ_RECIPIENT)) == (USB_REQ_VENDOR | USB_REQ_DEVICE)) {
 		if (req->bmRequestType & USB_REQ_DIRECTION) { //getter
-			switch(req->bRequest)
-			{
+			switch(req->bRequest) {
 				case CMD_MUX_SET: //0
 					if (req->wLength > 0) {
 						if (usbMuxGet(req->wIndex, req->data)) {
@@ -607,10 +667,20 @@ static usbd_respond usbControl(usbd_device *dev, usbd_ctlreq *req, usbd_rqc_call
 						}
 					}
 					break;
+				case 'W': //windows driver awareness
+					if (req->wIndex == 4) {
+						dbgPrintf("Windows special\r\n");
+						size_t copyLen = req->wLength;
+						//The first request is only 16bytes in length to get the size.
+						if (copyLen > sizeof(g_WcidPacket)) {
+							copyLen = sizeof(g_WcidPacket);
+						}
+						memcpy(req->data, g_WcidPacket, copyLen);
+						return usbd_ack;
+					}
 			}
 		} else { //setter
-			switch(req->bRequest)
-			{
+			switch(req->bRequest) {
 				case CMD_MUX_SET: //0
 					if (req->wLength > 0) {
 						if (usbCmdPutMux(req->wIndex, req->data)) {
@@ -1121,7 +1191,7 @@ void initPermanentSettings(void) {
 
 void initAudiomux(void) {
 	initUart2();
-	dbgPrintf("Audiomux 0.4 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
+	dbgPrintf("Audiomux 0.5 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
 	startUsb();
 	irmp_init();
 	initAdc();
@@ -1158,10 +1228,14 @@ void Audiomux1msPassed(uint32_t timestamp) {
 	if (irmp_get_data(&irmp_data)) {
 		execIrRec(&irmp_data);
 	}
-	if ((timestamp % 1000) == 0)
-	{
+	if ((timestamp % 1000) == 0) {
 		cycleCnt++;
 		dbgPrintf("Cycle %u\r\n", (unsigned int)cycleCnt);
+		if ((timestamp % 60000) == 0) {
+			uintptr_t stackTop = (uintptr_t)(&_estack);
+			uintptr_t delta = stackTop - g_MinStackValue;
+			dbgPrintf("Estimated stack usage: %ubyte\r\n", (unsigned int)delta);
+		}
 	}
 	uint8_t debugData = 0;
 	if (dbgUartGet(&debugData)) {

@@ -1,4 +1,4 @@
-# audiomux
+# Audiomux
 This project provides a box for switching 4 stereo audio inputs to 4 outputs. Any combination of inputs to outputs can be selected at the same time.
 Signal dissortion is minimized by using reed relays.
 Moreover, this provides galvanic isolation from the control circuit and if the input source can drive a headphone, it will work on the output of the mux too.

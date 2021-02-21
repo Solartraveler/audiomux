@@ -19,10 +19,10 @@ Call without parameters to get the current setup. Call
 
 ./audiomux-control.py state
 
-To get all predefined configurations for IR remote control codes and Vcc inputs.
+to get all predefined configurations for IR remote control codes and Vcc inputs.
 The input voltages and internal temperature are printed too.
 
-A debian package is planned.
+A debian package can be generated.
 
 ## Compiling and uploading
 
@@ -46,8 +46,6 @@ Debugging with SWD should be possible too, but this was not tested.
 
 The case must be milled to be useable.
 
-Get an own USB ID
-
 ## Libraries used and licenses
 
 The software uses several open source libraries with different licenses.
@@ -65,4 +63,8 @@ Since GPL 2.0 and Apache 2.0 are considered [incompatible](https://www.apache.or
 The PCB is under creative common license. [CC-BY-SA 3.0 DE](https://creativecommons.org/licenses/by-sa/3.0/de/deed.en)
 
 ## Windows users
-See my instructions for the [IRUSB project](https://github.com/Solartraveler/irusb). Only the USB ID and the name of the control program will be different.
+
+The device declares itself als WCID compatible uses WinUSB.
+So no driver installation is required.
+You still need libusb-1.0.dll either in your system directory or in the same directory as the audiomux-control.py script.
+The lib can be found [here](https://libusb.info). Tested with version 1.0.24, the dll can be found in VS2019\MS64\dll.

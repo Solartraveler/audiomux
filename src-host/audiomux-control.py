@@ -16,8 +16,7 @@
 # this program; if not, write to the Free Software Foundation, Inc., 51 Franklin
 # Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
-#version 0.6.0, tested with python 3.7
-
+#version 0.7.0, tested with python 3.7
 
 #Control codes:
 # bmRequest = 0 -> set/get mux, wIndex = 0...3 + 1 data byte
@@ -182,10 +181,11 @@ if parameters == 2:
 		print('0: Command sent')
 		print('1: Invalid command')
 		print('2: python USB library not installed')
-		print('3: USB device not found, or product name wrong')
+		print('3: No proper backend')
+		print('4: USB device not found, or product name wrong')
 		sys.exit(0)
 	if (sys.argv[1] == '--version'):
-		print('Version 0.6.0')
+		print('Version 0.7.0')
 		sys.exit(0)
 
 try:
@@ -195,30 +195,53 @@ try:
 except:
 	print('Ouch, can not import usb.core and usb.util')
 	print('Try: pip3 install pyusb')
+	print('On some systems the command is just pip')
 	print('Or as root: apt install python3-usb')
 	sys.exit(2)
 
-# find our device
+#By default, pyusb tries libusb1, openusb and libusb0
+#We do not want libusb0, as this can not communicate with devices using winusb
+import usb.backend.libusb1 as libusb1
+
+backendUsblib1 = libusb1.get_backend()
+if (backendUsblib1 is None):
+	print('No backend in your default search path')
+	import os
+	import pathlib
+	libsearch = str(pathlib.Path(__file__).parent.absolute())
+	print('Adding the script directory >' + libsearch + '< to the search path and try again...')
+	os.environ['PATH'] = libsearch + os.pathsep + os.environ['PATH']
+	backendUsblib1 = libusb1.get_backend()
+	if (backendUsblib1 is None):
+		print('Still no backend found! You need libusb-1.0')
+		if (os.name == 'nt'):
+			print('Copy libusb-1.0.dll to the folder of this script.')
+			print('You can get libusb-1.0.dll by pip install libusb1 (after this, the dll is still not in the search path)')
+			print('Or download from https://libusb.info/ -> within the .7z from the folder VS2019\\MS64\\dll')
+		else:
+			print('Try sudo apt install libusb-1.0-0 or any proper other installation command depending on your distribution')
+		sys.exit(3)
+
+#find our device
 #For testing own devices, use idProduct=0x0001
-#dev = usb.core.find(idVendor=0x1209, idProduct=0x0001)
-dev = usb.core.find(idVendor=0x1209, idProduct=0x7701)
+#dev = usb.core.find(idVendor=0x1209, idProduct=0x0001, backend=backendUsblib1)
+dev = usb.core.find(idVendor=0x1209, idProduct=0x7701, backend=backendUsblib1)
 
 # was it found?
 if dev is None:
-	print('Error, device not found')
-	sys.exit(3)
+	print('Error, device not found - not connected?')
+	sys.exit(4)
 
 # set the active configuration. With no arguments, the first
 # configuration will be the active one
 dev.set_configuration()
-
 
 if dev.manufacturer != 'marwedels.de':
 	print('Warning, the manufacturer >' + dev.manufacturer + '< might not be supported by this control program')
 
 if dev.product != 'Audiomux':
 	print('Error, the product >' + dev.product + '< is not be supported by this control program')
-	sys.exit(3)
+	sys.exit(4)
 
 
 #For ctrl_transfer: bmRequestType, bmRequest, wValue and wIndex, data array or its length

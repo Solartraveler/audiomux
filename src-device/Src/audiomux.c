@@ -622,7 +622,7 @@ static usbd_respond usbGetDesc(usbd_ctlreq *req, void **address, uint16_t *lengt
 static usbd_respond usbControl(usbd_device *dev, usbd_ctlreq *req, usbd_rqc_callback *callback) {
 	SampleStackUsage();
 	//Printing can be done here as long it is buffered. Otherwise it might be too slow
-	dbgPrintf("type %x req %x wVal %x wInd %x wLen %u\r\n", req->bmRequestType, req->bRequest, req->wValue, req->wIndex, req->wLength);
+	//dbgPrintf("type %x req %x wVal %x wInd %x wLen %u\r\n", req->bmRequestType, req->bRequest, req->wValue, req->wIndex, req->wLength);
 	if ((req->bmRequestType & (USB_REQ_TYPE | USB_REQ_RECIPIENT)) == (USB_REQ_VENDOR | USB_REQ_DEVICE)) {
 		if (req->bmRequestType & USB_REQ_DIRECTION) { //getter
 			switch(req->bRequest) {
@@ -670,7 +670,7 @@ static usbd_respond usbControl(usbd_device *dev, usbd_ctlreq *req, usbd_rqc_call
 					break;
 				case 'W': //windows driver awareness
 					if (req->wIndex == 4) {
-						dbgPrintf("Windows special\r\n");
+						//dbgPrintf("Windows special\r\n");
 						size_t copyLen = req->wLength;
 						//The first request is only 16bytes in length to get the size.
 						if (copyLen > sizeof(g_WcidPacket)) {

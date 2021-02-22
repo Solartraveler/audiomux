@@ -64,7 +64,7 @@ The PCB is under creative common license. [CC-BY-SA 3.0 DE](https://creativecomm
 
 ## Windows users
 
-The device declares itself als WCID compatible uses WinUSB.
+The device declares itself als WCID compatible and uses WinUSB.
 So no driver installation is required.
 You still need libusb-1.0.dll either in your system directory or in the same directory as the audiomux-control.py script.
 The lib can be found [here](https://libusb.info). Tested with version 1.0.24, the dll can be found in VS2019\MS64\dll.

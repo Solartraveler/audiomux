@@ -21,6 +21,7 @@ Version history:
 2021-02-14: 0.4 - features complete
 2021-02-20: 0.5 - analyze stack usage, add WCID extension
 2021-02-20: 0.6 - add final USB PID
+2021-02-22: 0.7 - replace HAL timer code by own one - saves flash
 
 
 Maximum HSI clock derivation:
@@ -561,10 +562,13 @@ static bool usbGetOtherPcbState(uint8_t * dataOut) {
 
 //--------- IR handling --------------------------------------------------------
 
-void  timer3IntCallback(void) {
+void TIM3_IRQHandler(void) {
 	irmp_ISR();
 	SampleStackUsage();
+	TIM3->SR = 0; //important is to clear TIM_SR_UIF
+	NVIC_ClearPendingIRQ(TIM3_IRQn); //clear flag
 }
+
 
 //---------- USB handling ------------------------------------------------------
 
@@ -926,6 +930,23 @@ static void ledUpdate(void) {
 	}
 }
 
+#if 0
+//can be used for performance statistics
+static void startTimer(void) {
+	__HAL_RCC_TIM2_CLK_ENABLE();
+	TIM2->CR1 &= ~TIM_CR1_CEN;
+	TIM2->CR2 = 0;
+	TIM2->PSC = 0;
+	TIM2->CNT = 0;
+	TIM2->CR1 = TIM_CR1_CEN;
+}
+
+static uint32_t getTimerVal(void) {
+	return TIM2->CNT;
+}
+
+#endif
+
 static uint16_t getAdc(uint32_t channel) {
 	ADC1->ISR |= ADC_ISR_EOC; //clear end of conversion bit
 	while (ADC1->CR & ADC_CR_ADSTART); //otherwise the channel can not be changed
@@ -946,7 +967,10 @@ void adcUpdate() {
 	*/
 	int32_t tsCal1 = *((uint16_t*)0x1FFFF7B8); //30°C calibration value
 	int32_t tsCal2 = *((uint16_t*)0x1FFFF7C2); //110°C calibration value
+	//startTimer();
 	uint32_t voltageJack = getAdc(ADC_CHANNEL_8);
+	//uint32_t ticks = getTimerVal();
+	//dbgPrintf("Ticks for Adc required: %u\r\n", ticks);
 	uint32_t voltageUsb = getAdc(ADC_CHANNEL_9);
 	int32_t temperature = getAdc(ADC_CHANNEL_TEMPSENSOR);
 	//dbgPrintf("%u, %u, %u\n\r", voltageUsb, voltageJack, temperature);
@@ -1190,9 +1214,23 @@ void initPermanentSettings(void) {
 	}
 }
 
+//Used for IR receive
+static void initTim3(void) {
+	__HAL_RCC_TIM3_CLK_ENABLE();
+	TIM3->CR1 = 0;
+	TIM3->CR2 = 0;
+	TIM3->DIER = TIM_DIER_UIE;
+	TIM3->PSC = 0;
+	TIM3->CNT = 0;
+	TIM3->ARR = (HAL_RCC_GetPCLK1Freq() / F_INTERRUPTS) - 1;
+	TIM3->CR1 = TIM_CR1_CEN;
+	NVIC_SetPriority(TIM3_IRQn, 0);
+	NVIC_EnableIRQ(TIM3_IRQn);
+}
+
 void initAudiomux(void) {
 	initUart2();
-	dbgPrintf("Audiomux 0.6.0 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
+	dbgPrintf("Audiomux 0.7.0 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
 	startUsb();
 	irmp_init();
 	initAdc();
@@ -1201,7 +1239,7 @@ void initAudiomux(void) {
 		g_secondPcb = true;
 	}
 	initUart1(); //*must* be after setting g_secondPcb
-	HAL_TIM_Base_Start_IT(&htim3);
+	initTim3();
 	initPermanentSettings();
 	dbgPrintf("started\r\n");
 }

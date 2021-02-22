@@ -57,8 +57,6 @@ void Error_Handler(void);
 
 extern IWDG_HandleTypeDef hiwdg;
 
-extern TIM_HandleTypeDef htim3;
-
 
 
 /* USER CODE END EFP */

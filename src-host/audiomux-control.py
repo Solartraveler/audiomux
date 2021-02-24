@@ -16,7 +16,7 @@
 # this program; if not, write to the Free Software Foundation, Inc., 51 Franklin
 # Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
-#version 0.7.0, tested with python 3.7
+#version 0.8.0, tested with python 3.7
 
 #Control codes:
 # bmRequest = 0 -> set/get mux, wIndex = 0...3 + 1 data byte
@@ -39,16 +39,23 @@ import time
 
 MuxOutputs = 4
 MuxInputs = 4
+MuxNc = 15
 PresetSlots = 16
+
+def printOutputState(spaces, out, inp):
+	if (inp == 0):
+		print(spaces + 'Output ' + str(out) + ': muted')
+	elif (inp == MuxNc):
+		print(spaces + 'Output ' + str(out) + ': not connected')
+	else:
+		print(spaces + 'Output ' + str(out) + ': Input ' + str(inp))
+
 
 def showCurrentMux(dev):
 	print('Current state:')
 	for i in range(1, MuxOutputs + 1):
 		deviceArray = dev.ctrl_transfer(bmRequestRecv, 0, 0, i, 1)
-		if (deviceArray[0] == 0):
-			print('  Output ' + str(i) + ': off')
-		else:
-			print('  Output ' + str(i) + ': Input ' + str(deviceArray[0]))
+		printOutputState('  ', i, deviceArray[0])
 
 def showCurrentState(dev):
 	showCurrentMux(dev)
@@ -56,18 +63,12 @@ def showCurrentState(dev):
 	deviceArray = dev.ctrl_transfer(bmRequestRecv, 1, 0, 0, 4)
 	print('On USB power:')
 	for i in range(0, MuxOutputs):
-		if (deviceArray[i] == 0):
-			print('  Output ' + str(i + 1) + ': off')
-		else:
-			print('  Output ' + str(i + 1) + ': Input ' + str(deviceArray[i]))
+		printOutputState('  ', i + 1, deviceArray[i])
 
 	deviceArray = dev.ctrl_transfer(bmRequestRecv, 1, 0, 1, 4)
 	print('On DC jack power:')
 	for i in range(0, MuxOutputs):
-		if (deviceArray[i] == 0):
-			print('  Output ' + str(i + 1) + ': off')
-		else:
-			print('  Output ' + str(i + 1) + ': Input ' + str(deviceArray[i]))
+		printOutputState('  ', i + 1, deviceArray[i])
 
 	print('IR presets:')
 	for i in range(1, PresetSlots + 1):
@@ -79,11 +80,8 @@ def showCurrentState(dev):
 			print('  Slot' + str(i) + ':')
 			print('    Protocol: ' + str(protocol) + ', address: ' + str(address) + ', command: ' + str(command))
 			for j in range(1, MuxOutputs + 1):
-				out = deviceArray[6 + j]
-				if (out == 0):
-					print('    Output ' + str(j) + ': off')
-				else:
-					print('    Output ' + str(i) + ': Input ' + str(out))
+				inp = deviceArray[6 + j]
+				printOutputState('    ', j, inp)
 		else:
 			print('  Slot' + str(i) + ': Unused')
 
@@ -136,12 +134,14 @@ def switchMux(dev, outputStr, inputStr):
 	out = int(outputStr, 0)
 	if inputStr == 'off':
 		inx = 0
+	elif inputStr == 'nc':
+		inx = MuxNc
 	else:
 		inx = int(inputStr, 0)
 	if not (1 <= out <= MuxOutputs):
 		print('Error, output out of range')
 		return(False)
-	if not (0 <= inx <= MuxInputs):
+	if (not (0 <= inx <= MuxInputs)) and (not (inx == MuxNc)):
 		print('Error, input out of range')
 		return(False)
 	usbdata = bytearray(1)
@@ -166,9 +166,10 @@ if parameters == 2:
 		print('--version:     Prints the version')
 		print('For most setter commands, there is a queue on the other side with up to 8 entries')
 		print('<output> <input>: changes the output')
-		print('  Numbers can be in decimal or hexadecimal')
+		print('  Numbers can be in decimal or hexadecimal or off or nc (not connected)')
 		print('  Example: 2 off')
 		print('  Example: 2 1')
+		print('  Example: 3 nc')
 		print('audiomuxreset: Resets the device. Ignoring the command queue. Both USB ports are being resetted')
 		print('savedefaultusb: Save the current state as default if the device is powered over USB')
 		print('savedefaultjack: Save the current state as default if the device is powered over an DC jack')
@@ -185,7 +186,7 @@ if parameters == 2:
 		print('4: USB device not found, or product name wrong')
 		sys.exit(0)
 	if (sys.argv[1] == '--version'):
-		print('Version 0.7.0')
+		print('Version 0.8.0')
 		sys.exit(0)
 
 try:

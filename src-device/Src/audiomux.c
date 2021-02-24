@@ -22,6 +22,7 @@ Version history:
 2021-02-20: 0.5 - analyze stack usage, add WCID extension
 2021-02-20: 0.6 - add final USB PID
 2021-02-22: 0.7 - replace HAL timer code by own one - saves flash
+2021-02-24: 0.8 - Add not connected output option
 
 
 Maximum HSI clock derivation:
@@ -111,12 +112,14 @@ type C1 req 57 wVal 0 wInd 5 wLen 10
 #define CMD_DELETE_IR 3
 
 #define MUX_OUTPUTS 4
+#define MUX_NC 0xF
 #define MUX_INPUTS 4
 #define IR_PRESET_SLOTS 16
 
 #define FLASH_PAGES ((FLASH_BANK1_END + 1 - FLASH_BASE) / FLASH_PAGE_SIZE)
 
 #define SETTINGS_FLASH_ADDR (FLASH_BASE + (FLASH_PAGES - 1) * FLASH_PAGE_SIZE)
+
 
 typedef struct {
 	/*
@@ -428,7 +431,7 @@ static bool usbCmdPut(const commandEntry_t * pCommand) {
 }
 
 static bool usbCmdPutMux(uint8_t wIndex, const uint8_t * buffer) {
-	if ((wIndex > 0) && (wIndex <= MUX_OUTPUTS) && (buffer[0] <= MUX_INPUTS)) {
+	if ((wIndex > 0) && (wIndex <= MUX_OUTPUTS) && ((buffer[0] <= MUX_INPUTS) || (buffer[0] == MUX_NC))) {
 		commandEntry_t command;
 		command.type = CMD_MUX_SET;
 		command.data[0] = wIndex;
@@ -791,7 +794,7 @@ static void MuxSetOutput(uint8_t output, uint8_t input, bool enabled) {
 }
 
 static void execMuxSwitch(uint8_t output, uint8_t input) {
-	if ((output > MUX_OUTPUTS) || (input > MUX_INPUTS)) {
+	if ((output > MUX_OUTPUTS) || ((input > MUX_INPUTS) && (input != MUX_NC))) {
 		return;
 	}
 	if (forThisPcb(output) == false) {
@@ -810,17 +813,23 @@ static void execMuxSwitch(uint8_t output, uint8_t input) {
 	if (output >= 3) {
 		output -= 2;
 	}
+	//goes to mute or nc
 	if (inputOld != 0) {
-		MuxSetOutput(output, 0, true); //mute on
-		HAL_Delay(10);
+		if (input != MUX_NC) {
+			MuxSetOutput(output, 0, true); //mute on
+			HAL_Delay(10);
+		}
 		for (uint8_t i = 1; i <= MUX_INPUTS; i++) {
 			MuxSetOutput(output, i, false); //inputs disconnected
 		}
 		HAL_Delay(10);
 	}
+	//goes to new output and disables mute
 	if (input != 0) {
-		MuxSetOutput(output, input, true); //new input connected
-		HAL_Delay(10);
+		if (input != MUX_NC) {
+			MuxSetOutput(output, input, true); //new input connected
+			HAL_Delay(10);
+		}
 		MuxSetOutput(output, 0, false); //mute off
 	}
 }
@@ -1163,7 +1172,7 @@ static void imcUpdate(void) {
 			dbgPrintf("Got command %x\r\n", cmdFromOther);
 			uint8_t output = (cmdFromOther >> 4) & 0xF;
 			uint8_t input = cmdFromOther & 0xF;
-			if ((output <= MUX_OUTPUTS) && (input <= MUX_INPUTS)) {
+			if ((output <= MUX_OUTPUTS) && ((input <= MUX_INPUTS) || (input == MUX_NC))) {
 				if (forThisPcb(output)) {
 					execMuxSwitchAndForward(output, input);
 				} else {
@@ -1230,7 +1239,7 @@ static void initTim3(void) {
 
 void initAudiomux(void) {
 	initUart2();
-	dbgPrintf("Audiomux 0.7.0 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
+	dbgPrintf("Audiomux 0.8.0 (c) 2021 by Malte Marwedel\r\nStarting...\r\n");
 	startUsb();
 	irmp_init();
 	initAdc();

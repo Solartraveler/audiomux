@@ -6,7 +6,7 @@ NAME="audiomux-control"
 BINARY="${BASE}/${NAME}"
 PACKAGEDIR="${BASE}/packages"
 CONTROLFILE="${PACKAGEDIR}/DEBIAN/control"
-VERSION=0.6.0
+VERSION=0.8.0
 
 mkdir -p "${PACKAGEDIR}/usr/bin"
 cp "${BINARY}.py" "${PACKAGEDIR}/usr/bin/${NAME}"

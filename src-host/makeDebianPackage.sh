@@ -1,12 +1,14 @@
 #!/bin/bash
 
-BASE=`dirname "$0"`
+set -e
+
+BASE=`pwd`
 
 NAME="audiomux-control"
 BINARY="${BASE}/${NAME}"
 PACKAGEDIR="${BASE}/packages"
 CONTROLFILE="${PACKAGEDIR}/DEBIAN/control"
-VERSION=0.8.0
+VERSION=`${BINARY}.py --version | head -n1 | cut -d " " -f2`
 
 mkdir -p "${PACKAGEDIR}/usr/bin"
 cp "${BINARY}.py" "${PACKAGEDIR}/usr/bin/${NAME}"

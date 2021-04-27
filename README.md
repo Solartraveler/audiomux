@@ -42,9 +42,13 @@ You can add a serial port with 3.3V level to J11 and see some debug messages whe
 
 Debugging with SWD should be possible too, but this was not tested.
 
-## TODO
+## Bugs
 
-The case must be milled to be useable.
+Maybe the biggest bug in the is the counterintuitive ordering of the in and outputs...
+
+![alt text](pictures/backside-audiomux.jpg "Audiomux backside")
+
+The soldering bridges would allow switching input (3 and 4) and/or (1 and 2).
 
 ## Libraries used and licenses
 

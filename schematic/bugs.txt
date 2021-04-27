@@ -1,4 +1,4 @@
-For a revision 1.1, I suggest:
+For a revision 1.1, I suggest fixing:
 1.
 The footprint of J5-J8 needs elongated holes approx 0.2mm more wide. Its currently difficult to press the plastic holders of the audio connector into it.
 2.
@@ -12,3 +12,9 @@ The RX and TX pins are directly connected, if the software is not configured pro
 5.
 While in DFU upload mode, the MCU pulls PA9, PA10 and PA15 high, as a result the relays switch and Inputs 3 and 4 are connected together with mute.
 Workaround: While uploading firmware, unplug audio inputs 3 and 4.
+6.
+The holes and cutout for the mounting screws are 2.7mm wide. Its hard to get 2.6mm screws. Increasing the hole/cutout to 3.0mm would allow the use of much more common 2.9mm screws
+7.
+The order of the in- and outputs went counter intuitive. Looking at the backside it is:
+Out2 Out1 In3  In1
+Out4 Out3 In4  In2

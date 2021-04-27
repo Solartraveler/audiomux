@@ -1,0 +1,83 @@
+(Exported by FreeCAD)
+(Post Processor: grbl_post)
+(Output Time:2021-03-29 17:28:02.872866)
+(begin preamble)
+G17 G90
+G21
+(begin operation: Default Tool)
+(Path: Default Tool)
+(Default Tool)
+(begin toolchange)
+; M6 T1
+M3 S0.0000
+(finish operation: Default Tool)
+(begin operation: Profile_Edges)
+(Path: Profile_Edges)
+(Profile_Edges)
+(Compensated Tool Path. Diameter: 2.0)
+G0 Z1.0000
+G0 X1.1000 Y1.1000
+G1 X1.1000 Y1.1000 Z-2.0000 F120.00
+G1 X1.1000 Y-6.1800 Z-2.0000 F120.00
+G1 X-35.1000 Y-6.1800 Z-2.0000 F120.00
+G1 X-35.1000 Y1.1000 Z-2.0000 F120.00
+G1 X1.1000 Y1.1000 Z-2.0000 F120.00
+G1 X1.1000 Y1.1000 Z-4.0000 F120.00
+G1 X1.1000 Y-6.1800 Z-4.0000 F120.00
+G1 X-35.1000 Y-6.1800 Z-4.0000 F120.00
+G1 X-35.1000 Y1.1000 Z-4.0000 F120.00
+G1 X1.1000 Y1.1000 Z-4.0000 F120.00
+G0 Z1.0000
+(finish operation: Profile_Edges)
+(begin operation: Profile_Edges002)
+(Path: Profile_Edges002)
+(Profile_Edges002)
+(Compensated Tool Path. Diameter: 2.0)
+G0 Z1.0000
+G0
+G0 Z-4.0000
+G1 X0.0000 Y1.4000 Z-4.0000 F120.00
+G1 X1.4000 Y1.4000 Z-4.0000 F120.00
+G1 X1.4000 Y-6.4800 Z-4.0000 F120.00
+G1 X-35.4000 Y-6.4800 Z-4.0000 F120.00
+G1 X-35.4000 Y1.4000 Z-4.0000 F120.00
+G1 X0.0000 Y1.4000 Z-4.0000 F120.00
+G0 Z1.0000
+(finish operation: Profile_Edges002)
+(begin operation: Profile_Edges001)
+(Path: Profile_Edges001)
+(Profile_Edges001)
+(Compensated Tool Path. Diameter: 2.0)
+G0 Z1.0000
+G0 X1.1000 Y-28.9000
+G1 X1.1000 Y-28.9000 Z-2.0000 F120.00
+G1 X1.1000 Y-37.7800 Z-2.0000 F120.00
+G1 X-35.1000 Y-37.7800 Z-2.0000 F120.00
+G1 X-35.1000 Y-28.9000 Z-2.0000 F120.00
+G1 X1.1000 Y-28.9000 Z-2.0000 F120.00
+G1 X1.1000 Y-28.9000 Z-4.0000 F120.00
+G1 X1.1000 Y-37.7800 Z-4.0000 F120.00
+G1 X-35.1000 Y-37.7800 Z-4.0000 F120.00
+G1 X-35.1000 Y-28.9000 Z-4.0000 F120.00
+G1 X1.1000 Y-28.9000 Z-4.0000 F120.00
+G0 Z1.0000
+(finish operation: Profile_Edges001)
+(begin operation: Profile_Edges003)
+(Path: Profile_Edges003)
+(Profile_Edges003)
+(Compensated Tool Path. Diameter: 2.0)
+G0 Z1.0000
+G0 Y-31.6000
+G0 Z-4.0000
+G1 X1.4000 Y-31.6000 Z-4.0000 F120.00
+G1 X1.4000 Y-38.0800 Z-4.0000 F120.00
+G1 X-35.4000 Y-38.0800 Z-4.0000 F120.00
+G1 X-35.4000 Y-28.6000 Z-4.0000 F120.00
+G1 X1.4000 Y-28.6000 Z-4.0000 F120.00
+G1 X1.4000 Y-31.6000 Z-4.0000 F120.00
+G0 Z1.0000
+(finish operation: Profile_Edges003)
+(begin postamble)
+M5
+G17 G90
+; M2

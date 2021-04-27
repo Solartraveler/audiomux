@@ -1,0 +1,68 @@
+(Exported by FreeCAD)
+(Post Processor: grbl_post)
+(Output Time:2021-04-06 17:56:03.545659)
+(begin preamble)
+G17 G90
+G21
+(begin operation: Default Tool)
+(Path: Default Tool)
+(Default Tool)
+(begin toolchange)
+; M6 T1
+M3 S0.0000
+(finish operation: Default Tool)
+(begin operation: Profile_Edges)
+(Path: Profile_Edges)
+(Profile_Edges)
+(Compensated Tool Path. Diameter: 2.0)
+G0 Z5.0000
+G0 X4.5240 Y4.5240
+G0 Z3.0000
+G1 X4.5240 Y4.5240 Z-1.5000 F120.00
+G2 X1.1124 Y-6.3004 Z-1.5000 I-4.5240 J-4.5240 F120.00
+G2 X-6.3004 Y-1.1124 Z-1.5000 I-1.1124 J6.3004 F120.00
+G2 X-1.1124 Y6.3004 Z-1.5000 I6.3004 J1.1124 F120.00
+G2 X4.5240 Y4.5240 Z-1.5000 I1.1124 J-6.3004 F120.00
+G1 X4.5240 Y4.5240 Z-3.0000 F120.00
+G2 X1.1124 Y-6.3004 Z-3.0000 I-4.5240 J-4.5240 F120.00
+G2 X-6.3004 Y-1.1124 Z-3.0000 I-1.1124 J6.3004 F120.00
+G2 X-1.1124 Y6.3004 Z-3.0000 I6.3004 J1.1124 F120.00
+G2 X4.5240 Y4.5240 Z-3.0000 I1.1124 J-6.3004 F120.00
+G0 Z5.0000
+(finish operation: Profile_Edges)
+(begin operation: Profile_EdgesFinish)
+(Path: Profile_EdgesFinish)
+(Profile_EdgesFinish)
+(Compensated Tool Path. Diameter: 2.0)
+G0 Z5.0000
+G0 X6.5000
+G0 Z-3.0000
+G1 X5.9984 Y-0.0000 Z-3.0000 F120.00
+G3 X-1.1856 Y5.8800 Z-3.0000 I-5.9984 J-0.0000 F120.00
+G3 X1.1856 Y-5.8800 Z-3.0000 I1.1856 J-5.8800 F120.00
+G3 X5.9984 Y-0.0000 Z-3.0000 I-1.1856 J5.8800 F120.00
+G0 Z5.0000
+(finish operation: Profile_EdgesFinish)
+(begin operation: Profile_EdgesCutout)
+(Path: Profile_EdgesCutout)
+(Profile_Edges002)
+(Compensated Tool Path. Diameter: 2.0)
+G0 Z5.0000
+G0 X5.0890 Y5.0890
+G0 Z3.0000
+G1 X5.0890 Y5.0890 Z-2.1500 F120.00
+G2 X1.2126 Y-7.0941 Z-2.1500 I-5.0890 J-5.0890 F120.00
+G2 X-7.0941 Y-1.2126 Z-2.1500 I-1.2126 J7.0941 F120.00
+G2 X-1.2126 Y7.0941 Z-2.1500 I7.0941 J1.2126 F120.00
+G2 X5.0890 Y5.0890 Z-2.1500 I1.2126 J-7.0941 F120.00
+G1 X5.0890 Y5.0890 Z-4.3000 F120.00
+G2 X1.2126 Y-7.0941 Z-4.3000 I-5.0890 J-5.0890 F120.00
+G2 X-7.0941 Y-1.2126 Z-4.3000 I-1.2126 J7.0941 F120.00
+G2 X-1.2126 Y7.0941 Z-4.3000 I7.0941 J1.2126 F120.00
+G2 X5.0890 Y5.0890 Z-4.3000 I1.2126 J-7.0941 F120.00
+G0 Z5.0000
+(finish operation: Profile_EdgesCutout)
+(begin postamble)
+M5
+G17 G90
+; M2

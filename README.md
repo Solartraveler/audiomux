@@ -46,7 +46,7 @@ Debugging with SWD should be possible too, but this was not tested.
 
 Maybe the biggest bug in the is the counterintuitive ordering of the in and outputs...
 
-![alt text](pictures/backside-audiomux.jpg "Audiomux backside")
+![alt text](pictures/audiomux-backside.jpg "Audiomux backside")
 
 The soldering bridges would allow switching input (3 and 4) and/or (1 and 2).
 

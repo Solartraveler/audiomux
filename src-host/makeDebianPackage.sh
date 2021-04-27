@@ -2,7 +2,7 @@
 
 set -e
 
-BASE=`pwd`
+BASE=`dirname $0`
 
 NAME="audiomux-control"
 BINARY="${BASE}/${NAME}"
